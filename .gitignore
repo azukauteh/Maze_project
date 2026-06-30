@@ -1,0 +1,12 @@
+/build/
+/*.exe
+/*.obj
+/*.o
+/*.pdb
+*.a
+*.so
+*.dylib
+*.log
+/.vs/
+/.vscode/
+vcpkg/
