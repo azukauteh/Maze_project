@@ -15,7 +15,7 @@ int map[]=           //the map array. Edit to change level but keep the outer wa
  1,0,0,0,0,0,0,1,
  1,0,0,0,0,1,0,1,
  1,0,0,0,0,0,0,1,
- 1,1,1,1,1,1,1,1,	
+ 1,1,1,1,1,1,1,1, 
 };
 
 void drawMap2D()
@@ -25,7 +25,7 @@ void drawMap2D()
  {
   for(x=0;x<mapX;x++)
   {
-   if(map[y*mapX+x]==1){ glColor3f(1,1,1);} else{ glColor3f(0,0,0);}
+   if(map[y*mapX+x]==1){ glColor3f(1,1,1);} else{ glColor3f(0,0,0);} 
    xo=x*mapS; yo=y*mapS;
    glBegin(GL_QUADS); 
    glVertex2i( 0   +xo+1, 0   +yo+1); 
@@ -35,7 +35,7 @@ void drawMap2D()
    glEnd();
   } 
  } 
-}//-----------------------------------------------------------------------------
+}//----------------------------------------------------------------------------- 
 
 
 //------------------------PLAYER------------------------------------------------
@@ -58,21 +58,23 @@ void Buttons(unsigned char key,int x,int y)
  if(key=='w'){ px+=pdx*5; py+=pdy*5;}
  if(key=='s'){ px-=pdx*5; py-=pdy*5;}
  glutPostRedisplay();
-}//-----------------------------------------------------------------------------
+}//----------------------------------------------------------------------------- 
 
 
 //---------------------------Draw Rays and Walls--------------------------------
-float distance(ax,ay,bx,by,ang){ return cos(degToRad(ang))*(bx-ax)-sin(degToRad(ang))*(by-ay);}
+float distance(float ax, float ay, float bx, float by, int ang){
+     return cos(degToRad(ang))*(bx-ax)-sin(degToRad(ang))*(by-ay);
+}
 
 void drawRays2D()
 {
- glColor3f(0,1,1); glBegin(GL_QUADS); glVertex2i(526,  0); glVertex2i(1006,  0); glVertex2i(1006,160); glVertex2i(526,160); glEnd();	
- glColor3f(0,0,1); glBegin(GL_QUADS); glVertex2i(526,160); glVertex2i(1006,160); glVertex2i(1006,320); glVertex2i(526,320); glEnd();	 	
-	
+ glColor3f(0,1,1); glBegin(GL_QUADS); glVertex2i(526,  0); glVertex2i(1006,  0); glVertex2i(1006,160); glVertex2i(526,160); glEnd(); 	
+ glColor3f(0,0,1); glBegin(GL_QUADS); glVertex2i(526,160); glVertex2i(1006,160); glVertex2i(1006,320); glVertex2i(526,320); glEnd(); 	 
+	 
  int r,mx,my,mp,dof,side; float vx,vy,rx,ry,ra,xo,yo,disV,disH; 
- 
+ 	
  ra=FixAng(pa+30);                                                              //ray set back 30 degrees
- 
+ 	
  for(r=0;r<60;r++)
  {
   //---Vertical--- 
@@ -116,7 +118,7 @@ void drawRays2D()
 
   ra=FixAng(ra-1);                                                              //go to next ray
  }
-}//-----------------------------------------------------------------------------
+}//----------------------------------------------------------------------------- 
 
 
 void init()
@@ -147,4 +149,3 @@ int main(int argc, char* argv[])
  glutKeyboardFunc(Buttons);
  glutMainLoop();
 }
-
