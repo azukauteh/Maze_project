@@ -7,6 +7,11 @@
 *.so
 *.dylib
 *.log
+*.swp
+*.swo
+CLAUDE.md
 /.vs/
 /.vscode/
 vcpkg/
+*.swp
+CLAUDE.md
