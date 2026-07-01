@@ -15,25 +15,31 @@ A first-person 3D maze game built with C and SDL2, using a classic raycasting en
 - Green exit wall triggers level transition
 
 ## Project layout
-
-```
+---
 .
 ├── src/
-│   ├── main.c          — SDL2 window, event loop, level transitions
-│   ├── engine.c        — raycasting, rendering, input, level data
-│   ├── engine.h        — GameState, Player, public API
-│   ├── map_parser.c    — fuzzing-safe text map parser
+│   ├── main.c          # SDL2 window, event loop, level transitions
+│   ├── engine.c        # raycasting, rendering, input, level data
+│   ├── engine.h        # GameState, Player, public API
+│   ├── map_parser.c    # fuzzing-safe text map parser
 │   ├── map_parser.h
-│   ├── Walls.cpp       — reference stub
 │   └── CMakeLists.txt
+├── include/
+│   ├── SDL.h           # SDL2 headers
+│   └── Walls.hpp       # reference stub (renamed from .cpp to .hpp if header-only)
 ├── tests/
-│   ├── test_level.c    — regression tests (no SDL2 required)
+│   ├── test_level.c    # regression tests (no SDL2 required)
 │   └── CMakeLists.txt
 ├── fuzz/
 │   └── map_fuzzer.c
+├── build/              # build artifacts (ignored in .gitignore)
+├── docs/               # documentation, CONTRIBUTING.md, etc.
 ├── .clusterfuzzlite/
-└── CMakeLists.txt
-```
+├── CMakeLists.txt      # root build config
+├── LICENSE
+├── README.md
+└── CLAUDE.md           # ignored in .gitignore
+---
 
 ## Build
 
