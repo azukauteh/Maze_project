@@ -1,79 +1,110 @@
 /*
- * fuzz/map_fuzzer.c — LibFuzzer entry point for map_parser.
+ * fuzz/map_fuzzer.c — LibFuzzer entry points for all three map parsers.
  *
- * Build (requires clang with libFuzzer support):
+ * Build:
+ *   clang -fsanitize=fuzzer,address -I../src \
+ *         fuzz/map_fuzzer.c src/map_parser.c -o map_fuzzer
+ *   ./map_fuzzer fuzz/corpus/map_fuzzer/ -max_len=512
  *
- *   clang -fsanitize=fuzzer,address \
- *         -I../src \
- *         fuzz/map_fuzzer.c src/map_parser.c \
- *         -o map_fuzzer
- *   ./map_fuzzer fuzz/corpus/map_fuzzer/ -max_len=256
+ * Three fuzz targets share one LLVMFuzzerTestOneInput by dispatching on the
+ * first byte of input (routing byte):
+ *   0x00 — text parser
+ *   0x01 — binary parser
+ *   0x02 — RLE parser
+ * Remaining bytes are fed to the selected parser.
  *
- * ClusterFuzzLite runs this automatically on every PR via
- * .clusterfuzzlite/build.sh. See project.yaml for engine config.
- *
- * What is being fuzzed
- * --------------------
- * parse_maze_map() accepts arbitrary byte input and must never:
- *   - crash or abort
- *   - read out of bounds (caught by ASan)
- *   - hang (DDA loop is bounded to 8 steps; parser loop is bounded to height)
- *   - return garbage in out_map when it returns 0
- *
- * The fuzzer feeds random byte sequences as if they were map text files.
- * Interesting edge cases found during manual testing:
- *   - Width/height declared as 0 or negative
- *   - Width/height exceeding MAP_MAX_WIDTH / MAP_MAX_HEIGHT
- *   - Row shorter or longer than declared width
- *   - Invalid cell characters (anything not in #.SE)
- *   - Input truncated mid-row
- *   - Input with only whitespace
- *   - Integer overflow in width * height
- *   - Very large declared dimensions (e.g. "32 32") with truncated body
- *
- * Corpus
- * ------
- * fuzz/corpus/map_fuzzer/seed1.txt is the initial seed. LibFuzzer mutates it
- * and adds new interesting inputs to the corpus directory automatically.
- * Commit interesting corpus files so future runs start from a richer base.
- *
- * Parser contract (from map_parser.h)
- * ------------------------------------
- * Returns 1 on success, 0 on any parse error.
- * On success, out_map->width, out_map->height, and out_map->cells are valid.
- * On failure, out_map contents are unspecified (zeroed by memset inside parser).
- * Input size is capped at sizeof(buffer)-1 = 255 bytes inside the parser.
+ * Bugs targeted:
+ *   - text:   buffer overflow on oversized input row
+ *   - binary: integer overflow in width*height (VULN a in map_parser.c)
+ *   - RLE:    out-of-bounds write when decoded length > W*H (VULN b)
  */
 
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "../src/map_parser.h"
 
-int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+/* ---- Text parser target ---- */
+
+static void fuzz_text(const uint8_t *data, size_t size) {
     MazeMap map;
+    int ok = parse_maze_map(data, size, &map);
+    if (ok) {
+        /* Exercise validation on every successfully parsed map */
+        MapValidation v = validate_maze_map(&map);
+        (void)v;
 
-    /*
-     * Call the parser. We do not care about the return value — both 0 and 1
-     * are valid outcomes. We only care that the function does not crash,
-     * corrupt memory, or loop indefinitely.
-     */
-    parse_maze_map(data, size, &map);
+        /* Exercise serialisation round-trip */
+        uint8_t  bin[8 + MAP_MAX_WIDTH * MAP_MAX_HEIGHT];
+        size_t   written = 0;
+        if (mazemap_to_binary(&map, bin, sizeof(bin), &written)) {
+            MazeMap map2;
+            parse_binary_map(bin, written, &map2);
+        }
+    }
+}
 
-    /*
-     * If parsing succeeded, do a basic sanity check on the output struct.
-     * These assertions will trip ASan/UBSan if the parser wrote out of bounds.
-     */
-    if (map.width  > 0 && map.width  <= MAP_MAX_WIDTH &&
-        map.height > 0 && map.height <= MAP_MAX_HEIGHT) {
-        /* Access every declared cell to trigger any OOB reads under ASan */
+/* ---- Binary parser target ---- */
+
+static void fuzz_binary(const uint8_t *data, size_t size) {
+    MazeMap map;
+    int ok = parse_binary_map(data, size, &map);
+    if (ok) {
+        /* Access every declared cell to trigger any OOB under ASan */
         volatile char sink = 0;
         for (int r = 0; r < map.height; r++)
             for (int c = 0; c < map.width; c++)
                 sink ^= map.cells[r][c];
         (void)sink;
-    }
 
-    return 0;  /* non-zero return causes LibFuzzer to treat input as a crash */
+        /* Round-trip back to binary */
+        uint8_t out[8 + MAP_MAX_WIDTH * MAP_MAX_HEIGHT];
+        size_t  wr = 0;
+        mazemap_to_binary(&map, out, sizeof(out), &wr);
+    }
+}
+
+/* ---- RLE parser target ---- */
+
+static void fuzz_rle(const uint8_t *data, size_t size) {
+    RLEMap rle;
+    int ok = parse_rle_map(data, size, &rle);
+    if (ok) {
+        /* Convert to MazeMap and validate */
+        MazeMap map;
+        if (rle_to_mazemap(&rle, &map)) {
+            MapValidation v = validate_maze_map(&map);
+            (void)v;
+
+            /* Round-trip RLE */
+            RLEMap rle2;
+            mazemap_to_rle(&map, &rle2);
+        }
+
+        /* Access flat cells buffer */
+        volatile char sink = 0;
+        int total = rle.width * rle.height;
+        for (int i = 0; i < total; i++)
+            sink ^= rle.cells[i];
+        (void)sink;
+    }
+}
+
+/* ---- Router ---- */
+
+int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    if (size < 2) return 0;
+
+    uint8_t route = data[0];
+    const uint8_t *payload = data + 1;
+    size_t         psize   = size - 1;
+
+    switch (route % 3) {
+        case 0: fuzz_text  (payload, psize); break;
+        case 1: fuzz_binary(payload, psize); break;
+        case 2: fuzz_rle   (payload, psize); break;
+    }
+    return 0;
 }
